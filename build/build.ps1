@@ -15,7 +15,7 @@
     [Parameter(Mandatory=$false)]
     [Alias("doc")]
     [switch] $docfx = $false,
-	
+
     # keep the build directories, don't clear them
     [Parameter(Mandatory=$false)]
     [Alias("c")]
@@ -375,11 +375,14 @@
 
   })
 
+  $nugetsourceUmbraco = "https://api.nuget.org/v3/index.json"
+
   $ubuild.DefineMethod("RestoreNuGet",
   {
     Write-Host "Restore NuGet"
     Write-Host "Logging to $($this.BuildTemp)\nuget.restore.log"
-    &$this.BuildEnv.NuGet restore "$($this.SolutionRoot)\src\Umbraco.sln" > "$($this.BuildTemp)\nuget.restore.log"
+	$params = "-Source", $nugetsourceUmbraco
+    &$this.BuildEnv.NuGet restore "$($this.SolutionRoot)\src\Umbraco.sln" > "$($this.BuildTemp)\nuget.restore.log" @params
     if (-not $?) { throw "Failed to restore NuGet packages." }
   })
 
@@ -392,13 +395,13 @@
     &$this.BuildEnv.NuGet Pack "$nuspecs\UmbracoCms.Core.nuspec" `
         -Properties BuildTmp="$($this.BuildTemp)" `
         -Version "$($this.Version.Semver.ToString())" `
-        -Symbols -SymbolPackageFormat snupkg -Verbosity detailed -outputDirectory "$($this.BuildOutput)" > "$($this.BuildTemp)\nupack.cmscore.log"
+        -Verbosity detailed -outputDirectory "$($this.BuildOutput)" > "$($this.BuildTemp)\nupack.cmscore.log"
     if (-not $?) { throw "Failed to pack NuGet UmbracoCms.Core." }
 
     &$this.BuildEnv.NuGet Pack "$nuspecs\UmbracoCms.Web.nuspec" `
         -Properties BuildTmp="$($this.BuildTemp)" `
         -Version "$($this.Version.Semver.ToString())" `
-        -Symbols -SymbolPackageFormat snupkg -Verbosity detailed -outputDirectory "$($this.BuildOutput)" > "$($this.BuildTemp)\nupack.cmsweb.log"
+        -Verbosity detailed -outputDirectory "$($this.BuildOutput)" > "$($this.BuildTemp)\nupack.cmsweb.log"
     if (-not $?) { throw "Failed to pack NuGet UmbracoCms.Web." }
 
     &$this.BuildEnv.NuGet Pack "$nuspecs\UmbracoCms.nuspec" `
@@ -429,52 +432,53 @@
     Write-Host "Prepare Azure Gallery"
     $this.CopyFile("$($this.SolutionRoot)\build\Azure\azuregalleryrelease.ps1", $this.BuildOutput)
   })
-  
+
   $ubuild.DefineMethod("PrepareCSharpDocs",
   {
     Write-Host "Prepare C# Documentation"
-	
+
     $src = "$($this.SolutionRoot)\src"
-      $tmp = $this.BuildTemp
-      $out = $this.BuildOutput
+    $tmp = $this.BuildTemp
+    $out = $this.BuildOutput
     $DocFxJson = Join-Path -Path $src "\ApiDocs\docfx.json"
     $DocFxSiteOutput = Join-Path -Path $tmp "\_site\*.*"
-	
 
-	#restore nuget packages
-	$this.RestoreNuGet()
     # run DocFx
     $DocFx = $this.BuildEnv.DocFx
-    
+
     & $DocFx metadata $DocFxJson
     & $DocFx build $DocFxJson
 
     # zip it
     & $this.BuildEnv.Zip a -tzip -r "$out\csharp-docs.zip" $DocFxSiteOutput
   })
-  
+
   $ubuild.DefineMethod("PrepareAngularDocs",
   {
     Write-Host "Prepare Angular Documentation"
-	
-    $src = "$($this.SolutionRoot)\src"
-      $out = $this.BuildOutput
-    
-    $this.CompileBelle()
 
-    "Moving to Umbraco.Web.UI.Client folder"
-    cd .\src\Umbraco.Web.UI.Client
+    $src = "$($this.SolutionRoot)\src"
+    $out = $this.BuildOutput
+
+    # Check if the solution has been built		
+    if (!(Test-Path "$src\Umbraco.Web.UI.Client\node_modules")) {throw "Umbraco needs to be built before generating the Angular Docs"}
+
+    "Moving to Umbraco.Web.UI.Docs folder"
+    cd $src\Umbraco.Web.UI.Docs
 
     "Generating the docs and waiting before executing the next commands"
-    & gulp docs | Out-Null
+	& npm install
+    & npx gulp docs
 
+    Pop-Location
+    
     # change baseUrl
     $BaseUrl = "https://our.umbraco.com/apidocs/v8/ui/"
-    $IndexPath = "./docs/api/index.html"
-    (Get-Content $IndexPath).replace('location.href.replace(rUrl, indexFile)', "`'" + $BaseUrl + "`'") | Set-Content $IndexPath
+    $IndexPath = "./api/index.html"
+    (Get-Content $IndexPath).replace('origin + location.href.substr(origin.length).replace(rUrl, indexFile)', "`'" + $BaseUrl + "`'") | Set-Content $IndexPath
 
     # zip it
-    & $this.BuildEnv.Zip a -tzip -r "$out\ui-docs.zip" "$src\Umbraco.Web.UI.Client\docs\api\*.*"
+    & $this.BuildEnv.Zip a -tzip -r "$out\ui-docs.zip" "$src\Umbraco.Web.UI.Docs\api\*.*"
   })
 
   $ubuild.DefineMethod("Build",
@@ -533,6 +537,7 @@
   # run
   if (-not $get)
   {
+cd
     if ($command.Length -eq 0)
     {
       $command = @( "Build" )

@@ -12,8 +12,10 @@ function treeSearchBox(localizationService, searchService, $q) {
             searchFromName: "@",
             showSearch: "@",
             section: "@",
+            datatypeKey: "@",
             hideSearchCallback: "=",
-            searchCallback: "="
+            searchCallback: "=",
+            autoFocus: "="
         },
         restrict: "E",    // restrict to an element
         replace: true,   // replace the html element with the template
@@ -33,6 +35,7 @@ function treeSearchBox(localizationService, searchService, $q) {
             if (!scope.showSearch) {
                 scope.showSearch = "false";
             }
+
 
             //used to cancel any request in progress if another one needs to take it's place
             var canceler = null;
@@ -60,11 +63,19 @@ function treeSearchBox(localizationService, searchService, $q) {
                         searchArgs["searchFrom"] = scope.searchFromId;
                     }
 
+                    //append dataTypeId value if there is one
+                    if (scope.datatypeKey) {
+                        searchArgs["dataTypeKey"] = scope.datatypeKey;
+                    }
+
                     searcher(searchArgs).then(function (data) {
                         scope.searchCallback(data);
                         //set back to null so it can be re-created
                         canceler = null;
                     });
+                }
+                else {
+                    scope.hideSearch();
                 }
             }
 

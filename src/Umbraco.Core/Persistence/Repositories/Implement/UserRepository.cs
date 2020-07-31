@@ -445,7 +445,7 @@ ORDER BY colName";
                 return;
             }
 
-            ((User) entity).AddingEntity();
+            entity.AddingEntity();
 
             // ensure security stamp if missing
             if (entity.SecurityStamp.IsNullOrWhiteSpace())
@@ -495,7 +495,7 @@ ORDER BY colName";
         protected override void PersistUpdatedItem(IUser entity)
         {
             // updates Modified date
-            ((User) entity).UpdatingEntity();
+            entity.UpdatingEntity();
 
             // ensure security stamp if missing
             if (entity.SecurityStamp.IsNullOrWhiteSpace())
@@ -555,6 +555,16 @@ ORDER BY colName";
                     userDto.PasswordConfig = PasswordConfigJson;
                     changedCols.Add("passwordConfig");
                 }
+            }
+
+            // If userlogin or the email has changed then need to reset security stamp
+            if (changedCols.Contains("userLogin") || changedCols.Contains("userEmail"))
+            {
+                userDto.EmailConfirmedDate = null;
+                userDto.SecurityStampToken = entity.SecurityStamp = Guid.NewGuid().ToString();
+                
+                changedCols.Add("emailConfirmedDate");
+                changedCols.Add("securityStampToken");  
             }
 
             //only update the changed cols

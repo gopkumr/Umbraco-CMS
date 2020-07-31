@@ -11,6 +11,7 @@ using Umbraco.Core.Cache;
 using Umbraco.Core.Services;
 using Umbraco.Web.Composing;
 using Umbraco.Web.Macros;
+using System.Web;
 
 namespace Umbraco.Web.PropertyEditors.ValueConverters
 {
@@ -23,18 +24,25 @@ namespace Umbraco.Web.PropertyEditors.ValueConverters
     {
         private readonly IUmbracoContextAccessor _umbracoContextAccessor;
         private readonly IMacroRenderer _macroRenderer;
+        private readonly HtmlLocalLinkParser _linkParser;
+        private readonly HtmlUrlParser _urlParser;
+        private readonly HtmlImageSourceParser _imageSourceParser;
 
-        public override PropertyCacheLevel GetPropertyCacheLevel(PublishedPropertyType propertyType)
+        public override PropertyCacheLevel GetPropertyCacheLevel(IPublishedPropertyType propertyType)
         {
             // because that version of RTE converter parses {locallink} and executes macros, its value has
             // to be cached at the published snapshot level, because we have no idea what the macros may depend on actually.
             return PropertyCacheLevel.Snapshot;
         }
 
-        public RteMacroRenderingValueConverter(IUmbracoContextAccessor umbracoContextAccessor, IMacroRenderer macroRenderer)
+        public RteMacroRenderingValueConverter(IUmbracoContextAccessor umbracoContextAccessor, IMacroRenderer macroRenderer,
+            HtmlLocalLinkParser linkParser, HtmlUrlParser urlParser, HtmlImageSourceParser imageSourceParser)
         {
             _umbracoContextAccessor = umbracoContextAccessor;
             _macroRenderer = macroRenderer;
+            _linkParser = linkParser;
+            _urlParser = urlParser;
+            _imageSourceParser = imageSourceParser;
         }
 
         // NOT thread-safe over a request because it modifies the
@@ -63,7 +71,14 @@ namespace Umbraco.Web.PropertyEditors.ValueConverters
             }
         }
 
-        public override object ConvertSourceToIntermediate(IPublishedElement owner, PublishedPropertyType propertyType, object source, bool preview)
+        public override object ConvertIntermediateToObject(IPublishedElement owner, IPublishedPropertyType propertyType, PropertyCacheLevel referenceCacheLevel, object inter, bool preview)
+        {
+            var converted = Convert(inter, preview);
+
+            return new HtmlString(converted == null ? string.Empty : converted);
+        }
+
+        private string Convert(object source, bool preview)
         {
             if (source == null)
             {
@@ -73,9 +88,9 @@ namespace Umbraco.Web.PropertyEditors.ValueConverters
             var sourceString = source.ToString();
 
             // ensures string is parsed for {localLink} and urls and media are resolved correctly
-            sourceString = TemplateUtilities.ParseInternalLinks(sourceString, preview, Current.UmbracoContext);
-            sourceString = TemplateUtilities.ResolveUrlsFromTextString(sourceString);
-            sourceString = TemplateUtilities.ResolveMediaFromTextString(sourceString);
+            sourceString = _linkParser.EnsureInternalLinks(sourceString, preview);
+            sourceString = _urlParser.EnsureUrls(sourceString);
+            sourceString = _imageSourceParser.EnsureImageSources(sourceString);
 
             // ensure string is parsed for macros and macros are executed correctly
             sourceString = RenderRteMacros(sourceString, preview);

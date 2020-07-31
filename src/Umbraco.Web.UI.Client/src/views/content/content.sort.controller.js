@@ -1,10 +1,9 @@
 (function () {
     "use strict";
 
-    function ContentSortController($scope, $filter, $routeParams, contentResource, navigationService) {
+    function ContentSortController($scope, $filter, $routeParams, contentResource, navigationService, eventsService) {
 
         var vm = this;
-        var parentId = $scope.currentNode.parentId ? $scope.currentNode.parentId : "-1";
         var id = $scope.currentNode.id;
 
         vm.loading = false;
@@ -42,7 +41,7 @@
             vm.saveButtonState = "busy";
             
             var args = {
-                parentId: parentId,
+                parentId: id,
                 sortedIds: _.map(vm.children, function(child){ return child.id; })
             };
 
@@ -51,6 +50,7 @@
                     navigationService.syncTree({ tree: "content", path: $scope.currentNode.path, forceReload: true })
                         .then(() => navigationService.reloadNode($scope.currentNode));
 
+                    eventsService.emit("sortCompleted", { id: id });
                     vm.saveButtonState = "success";
                 }, function(error) {
                     vm.error = error;
